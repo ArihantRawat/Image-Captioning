@@ -133,7 +133,7 @@ print('Extracted Features: %d' % len(features))
 dump(features, open('features.pkl', 'wb'))
 
 
-filename = dir_path + "/dataset/Flickr8k_text/Flickr8k.token.txt"
+filename = dir_path + "/dataset/Flicker8k_text/Flickr8k.token.txt"
 # load descriptions
 doc = load_doc(filename)
 # parse descriptions
