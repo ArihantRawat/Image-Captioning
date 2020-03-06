@@ -1,5 +1,5 @@
 from os import listdir
-from pickle import dump
+from pickle import dump, load
 from keras.applications.vgg16 import VGG16
 from keras.preprocessing.image import load_img
 from keras.preprocessing.image import img_to_array
@@ -95,7 +95,34 @@ def save_descriptions(descriptions, filename):
     file.close()
 
 
+def load_set(filename):
+    doc = load_doc(filename)
+    dataset = list()
+    for line in doc.split('\n'):
+        if len(line)<1:
+            continue
+        identifier = line.split('.')[0]
+        dataset.append(identifier)
+    return dataset
 
+def load_clean_descriptions(filename, dataset):
+    doc = load_doc(filename)
+    descriptions = dict()
+    for line in doc.split('\n'):
+        tokens = line.split()
+        image_id, image_desc = tokens[0], tokens[1:]
+        if image_id in dataset:
+            if image_id not in descriptions:
+                descriptions[image_id] = list()
+            desc = 'startseq' + ' '.join(image_desc) + 'endseq'
+
+            descriptions[image_id].append(desc)
+    return descriptions
+
+def load_photo_features(filename, dataset):
+    all_features = load(open(filename,'rb'))
+    features = {k: all_features[k] for k in dataset}
+    return features
 
 
 '''
@@ -104,18 +131,28 @@ features = extract_features(directory)
 print('Extracted Features: %d' % len(features))
 # save to file
 dump(features, open('features.pkl', 'wb'))
-'''
+
 
 filename = dir_path + "/dataset/Flickr8k_text/Flickr8k.token.txt"
 # load descriptions
 doc = load_doc(filename)
 # parse descriptions
 descriptions = load_descriptions(doc)
-print('Loaded: %d ' % len(descriptions))
+print("Loaded: ",len(descriptions))
 # clean descriptions
 clean_descriptions(descriptions)
 # summarize vocabulary
 vocabulary = to_vocabulary(descriptions)
-print('Vocabulary Size: %d' % len(vocabulary))
+print("Vocabulary Size: ",len(vocabulary))
 # save to file
 save_descriptions(descriptions, 'descriptions.txt')
+'''
+filename = dir_path + "/dataset/Flickr8k_text/Flickr_8k.trainImages.txt"
+train = load_set(filename)
+print("Dataset: ", len(train))
+# descriptions
+train_descriptions = load_clean_descriptions('descriptions.txt', train)
+print("Descriptions: train= ", len(train_descriptions))
+# photo features
+train_features = load_photo_features('features.pkl', train)
+print("Photos: train= ", len(train_features))
