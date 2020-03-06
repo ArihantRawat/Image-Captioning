@@ -115,7 +115,6 @@ def load_clean_descriptions(filename, dataset):
             if image_id not in descriptions:
                 descriptions[image_id] = list()
             desc = 'startseq' + ' '.join(image_desc) + 'endseq'
-
             descriptions[image_id].append(desc)
     return descriptions
 
@@ -125,28 +124,27 @@ def load_photo_features(filename, dataset):
     return features
 
 
-'''
-directory = dir_path + "/dataset/Flicker8k_Dataset"
-features = extract_features(directory)
-print('Extracted Features: %d' % len(features))
-# save to file
-dump(features, open('features.pkl', 'wb'))
+# directory = dir_path + "/dataset/Flickr8k_Dataset"
+# features = extract_features(directory)
+# print('Extracted Features: %d' % len(features))
+# # save to file
+# dump(features, open('features.pkl', 'wb'))
 
 
-filename = dir_path + "/dataset/Flicker8k_text/Flickr8k.token.txt"
-# load descriptions
-doc = load_doc(filename)
-# parse descriptions
-descriptions = load_descriptions(doc)
-print("Loaded: ",len(descriptions))
-# clean descriptions
-clean_descriptions(descriptions)
-# summarize vocabulary
-vocabulary = to_vocabulary(descriptions)
-print("Vocabulary Size: ",len(vocabulary))
-# save to file
-save_descriptions(descriptions, 'descriptions.txt')
-'''
+# filename = dir_path + "/dataset/Flickr8k_text/Flickr8k.token.txt"
+# # load descriptions
+# doc = load_doc(filename)
+# # parse descriptions
+# descriptions = load_descriptions(doc)
+# print("Loaded: ",len(descriptions))
+# # clean descriptions
+# clean_descriptions(descriptions)
+# # summarize vocabulary
+# vocabulary = to_vocabulary(descriptions)
+# print("Vocabulary Size: ",len(vocabulary))
+# # save to file
+# save_descriptions(descriptions, 'descriptions.txt')
+
 filename = dir_path + "/dataset/Flickr8k_text/Flickr_8k.trainImages.txt"
 train = load_set(filename)
 print("Dataset: ", len(train))
