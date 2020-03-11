@@ -1,14 +1,23 @@
 from os import listdir
 from pickle import dump, load
+from numpy import array
 from keras.applications.vgg16 import VGG16
 from keras.preprocessing.image import load_img
 from keras.preprocessing.image import img_to_array
 from keras.applications.vgg16 import preprocess_input
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
+from keras.utils import plot_model
 from keras.utils import to_categorical
 from keras.models import Model
-import os 
+from keras.layers import Input
+from keras.layers import Dense
+from keras.layers import LSTM
+from keras.layers import Embedding
+from keras.layers import Dropout
+from keras.layers.merge import add
+from keras.callbacks import ModelCheckpoint
+import os
 import string
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -28,7 +37,7 @@ def extract_features(directory):
         image = img_to_array(image)
         image = image.reshape((1, image.shape[0], image.shape[1], image.shape[2]))
         image = preprocess_input(image)
-        
+
         feature = model.predict(image, verbose=0)
         image_id = name.split('.')[0]
 
@@ -54,7 +63,6 @@ def load_descriptions(doc):
 
         image_id, image_desc = tokens[0], tokens[1:]
         image_id = image_id.split('.')[0]
-
         image_desc = ' '.join(image_desc)
 
         if image_id not in mapping:
@@ -69,7 +77,6 @@ def clean_descriptions(descriptions):
     table = str.maketrans('','', string.punctuation)
     for key, desc_list in descriptions.items():
         for i in range(len(desc_list)):
-
             desc = desc_list[i]
             desc = desc.split()
             desc = [word.lower() for word in desc]
@@ -80,10 +87,8 @@ def clean_descriptions(descriptions):
 
 def to_vocabulary(descriptions):
     all_desc = set()
-    
     for key in descriptions.keys():
         [all_desc.update(d.split()) for d in descriptions[key]]
-    
     return all_desc
 
 def save_descriptions(descriptions, filename):
@@ -91,7 +96,7 @@ def save_descriptions(descriptions, filename):
     for key, desc_list in descriptions.items():
         for desc in desc_list:
             lines.append(key + ' ' + desc)
-    
+
     data = '\n'.join(lines)
     file = open(filename, 'w')
     file.write(data)
@@ -117,7 +122,7 @@ def load_clean_descriptions(filename, dataset):
         if image_id in dataset:
             if image_id not in descriptions:
                 descriptions[image_id] = list()
-            desc = 'startseq' + ' '.join(image_desc) + 'endseq'
+            desc = 'startseq ' + ' '.join(image_desc) + ' endseq'
             descriptions[image_id].append(desc)
     return descriptions
 
@@ -142,8 +147,7 @@ def create_sequences(tokenizer, max_length, descriptions, photos, vocab_size):
     X1, X2, y = list(), list(), list()
     for key, desc_list in descriptions.items():
         for desc in desc_list:
-            seq = tokenizer.texts_to_sequence(desc)[0]
-            
+            seq = tokenizer.texts_to_sequences([desc])[0]
             for i in range(1, len(seq)):
                 in_seq, out_seq = seq[:i], seq[i]
                 in_seq = pad_sequences([in_seq], maxlen = max_length)[0]
@@ -155,9 +159,29 @@ def create_sequences(tokenizer, max_length, descriptions, photos, vocab_size):
     return array(X1),array(X2),array(y)
 
 def max_length(descriptions):
-    lines = to_lines(descriptions) 
+    lines = to_lines(descriptions)
     return max(len(d.split()) for d in lines)
 
+def define_model(vocab_size,max_length):
+    # feature extractor model
+    inputs1 = Input(shape=(4096,))
+    fe1 = Dropout(0.5)(inputs1)
+    fe2 = Dense(256,activation='relu')(fe1)
+    # sequence model
+    inputs2 = Input(shape=(max_length,))
+    se1 = Embedding(vocab_size,256,mask_zero=True)(inputs2)
+    se2 = Dropout(0.5)(se1)
+    se3 = LSTM(256)(se2)
+    # decoder model
+    decoder1 = add([fe2,se3])
+    decoder2 = Dense(256,activation='relu')(decoder1)
+    outputs = Dense(vocab_size,activation='softmax')(decoder2)
+    # put it together [image,seq] [word]
+    model = Model(inputs=[inputs1,inputs2],outputs=outputs)
+    model.compile(loss='categorical_crossentropy',optimizer='adam')
+    print(model.summary())
+    #plot_model(model,to_file='model.png',show_shapes=True)
+    return model
 
 # directory = dir_path + "/dataset/Flickr8k_Dataset"
 # features = extract_features(directory)
@@ -180,6 +204,7 @@ def max_length(descriptions):
 # # save to file
 # save_descriptions(descriptions, 'descriptions.txt')
 
+# loading training data (6K)
 filename = dir_path + "/dataset/Flickr8k_text/Flickr_8k.trainImages.txt"
 train = load_set(filename)
 print("Dataset: ", len(train))
@@ -189,7 +214,34 @@ print("Descriptions: train= ", len(train_descriptions))
 # photo features
 train_features = load_photo_features('features.pkl', train)
 print("Photos: train= ", len(train_features))
-
+# prepare tokenizer
 tokenizer = create_tokenizer(train_descriptions)
 vocab_size = len(tokenizer.word_index) + 1
 print('Vocabulary Size: %d' % vocab_size)
+# determine the max sequence length
+max_length = max_length(train_descriptions)
+print('Description Length: %d' % max_length)
+# prepare sequences
+X1train, X2train, ytrain = create_sequences(tokenizer,max_length,train_descriptions,train_features,vocab_size)
+
+
+# loading dev data
+filename = dir_path + "/dataset/Flickr8k_text/Flickr_8k.devImages.txt"
+test = load_set(filename)
+print("Dataset: ", len(test))
+# descriptions
+test_descriptions = load_clean_descriptions('descriptions.txt', test)
+print("Descriptions: test= ", len(test_descriptions))
+# photo features
+test_features = load_photo_features('features.pkl', test)
+print("Photos: test= ", len(test_features))
+# prepare sequences
+X1test, X2test, ytest = create_sequences(tokenizer,max_length,test_descriptions,test_features,vocab_size)
+
+# fit model
+model = define_model(vocab_size,max_length)
+# define checkpoint callback
+filepath = dir_path + 'model-ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5'
+checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+# fit model
+model.fit([X1train,X2train], ytrain, epochs=20, verbose=2, callbacks=[checkpoint], validation_data=([X1test,X2test],ytest))
